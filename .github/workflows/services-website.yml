@@ -1,0 +1,50 @@
+name: vue-cypress-vercel/tests
+
+on:
+  schedule:
+    - cron: '* */24 * * *'
+  pull_request:
+
+jobs:
+  test_setup:
+    name: Test setup
+    runs-on: ubuntu-latest
+    outputs:
+      preview_url: ${{ steps.waitForVercelPreviewDeployment.outputs.url }}
+    steps:
+      - name: Wait for Vercel preview deployment to be ready
+        uses: patrickedqvist/wait-for-vercel-preview@master
+        id: waitForVercelPreviewDeployment
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          max_timeout: 60
+  test_lighthouse:
+    name: Test Lighthouse
+    needs: test_setup
+    runs-on:  ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Audit Vercel preview URL using Lighthouse
+        uses: treosh/lighthouse-ci-action@v3
+        with:
+          urls: |
+            ${{ needs.test_setup.outputs.preview_url }}
+          budgetPath: ./services/lighthouse/budget.json
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+  test_e2e:
+    name: Test E2E Cypress
+    needs: test_setup
+    runs-on: ubuntu-16.04
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run Cypress
+        uses: cypress-io/github-action@v1
+        with:
+          config: baseUrl=${{ needs.test_setup.outputs.preview_url }}
+          config-file: cypress.json
+          install: false
+          browser: chrome
+          headless: true
+        env:
+          NODE_ENV: testing
